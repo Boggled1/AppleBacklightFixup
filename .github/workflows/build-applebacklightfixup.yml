@@ -26,7 +26,6 @@ jobs:
           chmod +x Scripts/bootstrap.sh || true
           ./Scripts/bootstrap.sh || true
 
-          # If bootstrap didn't fetch MacKernelSDK headers, clone fallback repo
           if [ ! -d "MacKernelSDK/Headers" ] || [ -z "$(ls -A MacKernelSDK/Headers 2>/dev/null || true)" ]; then
             echo "MacKernelSDK/Headers missing — cloning fallback MacKernelSDK repo"
             rm -rf MacKernelSDK || true
@@ -52,7 +51,7 @@ jobs:
           xcodebuild -version || true
           xcrun --sdk macosx --show-sdk-path || true
 
-      - name: Build Lilu (explicit SDK usr/include + MacKernelSDK Kernel.framework headers)
+      - name: Build Lilu (use SDK usr/include + MacKernelSDK root only)
         working-directory: Lilu
         run: |
           set -euo pipefail
@@ -61,13 +60,13 @@ jobs:
           echo "Using SDK: $SDK_PATH"
 
           MKSDK="$PWD/MacKernelSDK/Headers"
-          MK_KERNEL_HEADERS="$MKSDK/System/Library/Frameworks/Kernel.framework/Headers"
-          echo "MacKernelSDK headers path: $MKSDK"
-          echo "Kernel.framework headers path: $MK_KERNEL_HEADERS"
+          echo "MacKernelSDK headers root: $MKSDK"
+          echo "Check libkern presence:"
+          ls -la "$MKSDK/libkern" || true
+          ls -la "$MKSDK/libkern/libkern.h" || true
 
-          # include SDK usr/include and MacKernelSDK kernel headers (explicit)
-          HEADER_PATHS="$SDK_PATH/usr/include $MKSDK $MK_KERNEL_HEADERS"
-          OTHER_FLAGS="-isysroot $SDK_PATH -I$SDK_PATH/usr/include -I$MKSDK -I$MK_KERNEL_HEADERS"
+          HEADER_PATHS="$SDK_PATH/usr/include $MKSDK"
+          OTHER_FLAGS="-isysroot $SDK_PATH -I$SDK_PATH/usr/include -I$MKSDK"
           echo "HEADER_PATHS: $HEADER_PATHS"
 
           xcodebuild -project Lilu.xcodeproj -scheme Lilu -configuration Release \
@@ -117,7 +116,7 @@ jobs:
           cp -R workspace_kexts/Lilu.kext AppleBacklightFixup/Lilu.kext || true
           ls -la AppleBacklightFixup || true
 
-      - name: Build AppleBacklightFixup (use SDK usr/include and MacKernelSDK kernel headers)
+      - name: Build AppleBacklightFixup (use SDK usr/include + MacKernelSDK root only)
         working-directory: AppleBacklightFixup
         run: |
           set -euo pipefail
@@ -126,10 +125,51 @@ jobs:
           echo "Using SDK: $SDK_PATH"
 
           MKSDK="$PWD/../Lilu/MacKernelSDK/Headers"
-          MK_KERNEL_HEADERS="$MKSDK/System/Library/Frameworks/Kernel.framework/Headers"
           echo "MacKernelSDK headers path (for AppleBacklightFixup): $MKSDK"
-          echo "Kernel.framework headers path (for AppleBacklightFixup): $MK_KERNEL_HEADERS"
+          echo "Check libkern presence:"
+          ls -la "$MKSDK/libkern" || true
+          ls -la "$MKSDK/libkern/libkern.h" || true
 
-          HEADER_PATHS="$SDK_PATH/usr/include $MKSDK $MK_KERNEL_HEADERS"
-          OTHER_FLAGS="-isysroot $SDK_PATH -I$SDK_PATH/usr/include -I$MKSDK -I$MK_KERNEL_HEADERS"
-          echo "HEADER_PATH
+          HEADER_PATHS="$SDK_PATH/usr/include $MKSDK"
+          OTHER_FLAGS="-isysroot $SDK_PATH -I$SDK_PATH/usr/include -I$MKSDK"
+          echo "HEADER_PATHS: $HEADER_PATHS"
+
+          xcodebuild -project AppleBacklightFixup.xcodeproj -scheme AppleBacklightFixup -configuration Release \
+            -sdk macosx \
+            SDKROOT="$SDK_PATH" \
+            MACOSX_DEPLOYMENT_TARGET=10.13 \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            HEADER_SEARCH_PATHS="$HEADER_PATHS" \
+            OTHER_CFLAGS="$OTHER_FLAGS" \
+            -derivedDataPath build \
+            | tee build/logs/applebacklightfixup-xcode.log
+          tail -n 200 build/logs/applebacklightfixup-xcode.log || true
+
+      - name: Upload AppleBacklightFixup logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: applebacklightfixup-logs
+          path: AppleBacklightFixup/build/logs/applebacklightfixup-xcode.log
+
+      - name: Collect built AppleBacklightFixup.kext
+        working-directory: AppleBacklightFixup
+        run: |
+          mkdir -p build_output
+          KEXT_PATH=$(find ~/Library/Developer/Xcode/DerivedData -type d -name "*AppleBacklightFixup*" -exec find {} -path "*/Build/Products/Release/AppleBacklightFixup.kext" -print \; | head -n 1 || true)
+          if [ -z "$KEXT_PATH" ] && [ -d "build/Release/AppleBacklightFixup.kext" ]; then
+            KEXT_PATH="$(pwd)/build/Release/AppleBacklightFixup.kext"
+          fi
+          if [ -n "$KEXT_PATH" ] && [ -d "$KEXT_PATH" ]; then
+            cp -R "$KEXT_PATH" build_output/AppleBacklightFixup.kext
+          else
+            echo "AppleBacklightFixup.kext not found at $KEXT_PATH" && ls -R . || true
+            exit 1
+          fi
+          ls -la build_output
+
+      - name: Upload built kext artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AppleBacklightFixup-kext
+          path: AppleBacklightFixup/build_output/AppleBacklightFixup.kext
