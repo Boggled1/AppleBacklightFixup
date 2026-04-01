@@ -51,32 +51,23 @@ jobs:
           xcodebuild -version || true
           xcrun --sdk macosx --show-sdk-path || true
 
-      - name: Build Lilu (use SDK usr/include + MacKernelSDK root only)
+      - name: Build Lilu (use project defaults; do not inject Kernel.framework headers)
         working-directory: Lilu
         run: |
           set -euo pipefail
           mkdir -p build/logs
           SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
           echo "Using SDK: $SDK_PATH"
+          echo "Confirm MacKernelSDK root:"
+          ls -la MacKernelSDK/Headers || true
 
-          MKSDK="$PWD/MacKernelSDK/Headers"
-          echo "MacKernelSDK headers root: $MKSDK"
-          echo "Check libkern presence:"
-          ls -la "$MKSDK/libkern" || true
-          ls -la "$MKSDK/libkern/libkern.h" || true
-
-          HEADER_PATHS="$SDK_PATH/usr/include $MKSDK"
-          OTHER_FLAGS="-isysroot $SDK_PATH -I$SDK_PATH/usr/include -I$MKSDK"
-          echo "HEADER_PATHS: $HEADER_PATHS"
-
+          # Use project defaults so Lilu's Xcode project controls header ordering.
           xcodebuild -project Lilu.xcodeproj -scheme Lilu -configuration Release \
             -sdk macosx \
             SDKROOT="$SDK_PATH" \
             MACOSX_DEPLOYMENT_TARGET=10.13 \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            HEADER_SEARCH_PATHS="$HEADER_PATHS" \
-            OTHER_CFLAGS="$OTHER_FLAGS" \
             -derivedDataPath build \
             | tee build/logs/lilu-xcode.log
           tail -n 200 build/logs/lilu-xcode.log || true
@@ -116,32 +107,23 @@ jobs:
           cp -R workspace_kexts/Lilu.kext AppleBacklightFixup/Lilu.kext || true
           ls -la AppleBacklightFixup || true
 
-      - name: Build AppleBacklightFixup (use SDK usr/include + MacKernelSDK root only)
+      - name: Build AppleBacklightFixup Build AppleBacklightFixup (use project defaults; do not inject Kernel.framework headers)
         working-directory: AppleBacklightFixup
         run: |
           set -euo pipefail
           mkdir -p build/logs
           SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
           echo "Using SDK: $SDK_PATH"
+          echo "Confirm Lilu MacKernelSDK path:"
+          ls -la ../Lilu/MacKernelSDK/Headers || true
 
-          MKSDK="$PWD/../Lilu/MacKernelSDK/Headers"
-          echo "MacKernelSDK headers path (for AppleBacklightFixup): $MKSDK"
-          echo "Check libkern presence:"
-          ls -la "$MKSDK/libkern" || true
-          ls -la "$MKSDK/libkern/libkern.h" || true
-
-          HEADER_PATHS="$SDK_PATH/usr/include $MKSDK"
-          OTHER_FLAGS="-isysroot $SDK_PATH -I$SDK_PATH/usr/include -I$MKSDK"
-          echo "HEADER_PATHS: $HEADER_PATHS"
-
+          # Use project defaults so AppleBacklightFixup's Xcode project controls header ordering.
           xcodebuild -project AppleBacklightFixup.xcodeproj -scheme AppleBacklightFixup -configuration Release \
             -sdk macosx \
             SDKROOT="$SDK_PATH" \
             MACOSX_DEPLOYMENT_TARGET=10.13 \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            HEADER_SEARCH_PATHS="$HEADER_PATHS" \
-            OTHER_CFLAGS="$OTHER_FLAGS" \
             -derivedDataPath build \
             | tee build/logs/applebacklightfixup-xcode.log
           tail -n 200 build/logs/applebacklightfixup-xcode.log || true
