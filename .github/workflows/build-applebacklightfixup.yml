@@ -32,16 +32,16 @@ jobs:
           xcodebuild -version || true
           xcrun --sdk macosx --show-sdk-path || true
 
-      - name: Build Lilu (with explicit header paths)
+      - name: Build Lilu (avoid exposing Kernel.framework headers to user files)
         working-directory: Lilu
         run: |
           set -euo pipefail
           mkdir -p build/logs
           SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
           echo "Using SDK: $SDK_PATH"
-          # ensure we include SDK usr/include and kernel headers and MacKernelSDK headers
-          HEADER_PATHS="$SDK_PATH/usr/include $SDK_PATH/System/Library/Frameworks/Kernel.framework/Headers $PWD/MacKernelSDK/Headers"
-          OTHER_FLAGS="-isysroot $SDK_PATH -I$SDK_PATH/usr/include -I$SDK_PATH/System/Library/Frameworks/Kernel.framework/Headers -I$PWD/MacKernelSDK/Headers"
+          # include SDK usr/include and MacKernelSDK headers, but do NOT add Kernel.framework/Headers globally
+          HEADER_PATHS="$SDK_PATH/usr/include $PWD/MacKernelSDK/Headers"
+          OTHER_FLAGS="-isysroot $SDK_PATH -I$SDK_PATH/usr/include -I$PWD/MacKernelSDK/Headers"
           echo "HEADER_PATHS: $HEADER_PATHS"
           xcodebuild -project Lilu.xcodeproj -scheme Lilu -configuration Release \
             -sdk macosx \
@@ -90,16 +90,16 @@ jobs:
           cp -R workspace_kexts/Lilu.kext AppleBacklightFixup/Lilu.kext || true
           ls -la AppleBacklightFixup || true
 
-      - name: Build AppleBacklightFixup (with explicit header paths)
+      - name: Build AppleBacklightFixup (use SDK usr/include; avoid Kernel.framework headers globally)
         working-directory: AppleBacklightFixup
         run: |
           set -euo pipefail
           mkdir -p build/logs
           SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
           echo "Using SDK: $SDK_PATH"
-          # Use same header paths so Availability.h and kernel headers are found
-          HEADER_PATHS="$SDK_PATH/usr/include $SDK_PATH/System/Library/Frameworks/Kernel.framework/Headers $PWD/../Lilu/MacKernelSDK/Headers"
-          OTHER_FLAGS="-isysroot $SDK_PATH -I$SDK_PATH/usr/include -I$SDK_PATH/System/Library/Frameworks/Kernel.framework/Headers -I$PWD/../Lilu/MacKernelSDK/Headers"
+          # Use SDK usr/include and Lilu's MacKernelSDK headers; do NOT add Kernel.framework/Headers globally
+          HEADER_PATHS="$SDK_PATH/usr/include $PWD/../Lilu/MacKernelSDK/Headers"
+          OTHER_FLAGS="-isysroot $SDK_PATH -I$SDK_PATH/usr/include -I$PWD/../Lilu/MacKernelSDK/Headers"
           echo "HEADER_PATHS: $HEADER_PATHS"
           xcodebuild -project AppleBacklightFixup.xcodeproj -scheme AppleBacklightFixup -configuration Release \
             -sdk macosx \
