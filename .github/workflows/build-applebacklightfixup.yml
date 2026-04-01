@@ -26,6 +26,7 @@ jobs:
           chmod +x Scripts/bootstrap.sh || true
           ./Scripts/bootstrap.sh || true
 
+          # If bootstrap didn't fetch MacKernelSDK headers, clone fallback repo
           if [ ! -d "MacKernelSDK/Headers" ] || [ -z "$(ls -A MacKernelSDK/Headers 2>/dev/null || true)" ]; then
             echo "MacKernelSDK/Headers missing — cloning fallback MacKernelSDK repo"
             rm -rf MacKernelSDK || true
@@ -78,22 +79,45 @@ jobs:
           name: lilu-logs
           path: Lilu/build/logs/lilu-xcode.log
 
-      - name: Copy built Lilu.kext into workspace (if present)
+      - name: Prepare AppleBacklightFixup Lilu.kext source + binary
         run: |
-          mkdir -p workspace_kexts
-          if [ -d "Lilu/build/Release/Lilu.kext" ]; then
-            cp -R Lilu/build/Release/Lilu.kext workspace_kexts/Lilu.kext
-          elif [ -d "Lilu/build/Build/Products/Release/Lilu.kext" ]; then
-            cp -R Lilu/build/Build/Products/Release/Lilu.kext workspace_kexts/Lilu.kext
-          else
-            FOUND=$(find ~/Library/Developer/Xcode/DerivedData -type d -name "Lilu-*" -exec find {} -path "*/Build/Products/Release/Lilu.kext" -print \; | head -n 1 || true)
-            if [ -n "$FOUND" ]; then
-              cp -R "$FOUND" workspace_kexts/Lilu.kext
-            else
-              echo "Lilu.kext not found after build" && ls -R Lilu || true
-            fi
+          set -euo pipefail
+
+          # Ensure destination tree exists
+          mkdir -p AppleBacklightFixup/Lilu.kext/Contents/Resources/Library
+
+          # 1) If Lilu repo contains a Lilu.kext source tree, copy its Resources/Library sources
+          if [ -d "Lilu/Lilu.kext/Contents/Resources/Library" ]; then
+            echo "Copying Lilu source Resources/Library from Lilu repo"
+            rm -rf AppleBacklightFixup/Lilu.kext/Contents/Resources/Library/* || true
+            cp -R Lilu/Lilu.kext/Contents/Resources/Library/* AppleBacklightFixup/Lilu.kext/Contents/Resources/Library/ || true
           fi
-          ls -la workspace_kexts || true
+
+          # 2) Fallback: find any plugin_start.cpp in the checkout and copy it
+          FOUND_SRC=$(find . -type f -name plugin_start.cpp -print -quit || true)
+          if [ -n "$FOUND_SRC" ]; then
+            echo "Found plugin_start.cpp at: $FOUND_SRC — copying into AppleBacklightFixup Lilu.kext"
+            cp "$FOUND_SRC" AppleBacklightFixup/Lilu.kext/Contents/Resources/Library/ || true
+          fi
+
+          # 3) Copy the built Lilu.kext binary into the AppleBacklightFixup folder (if present)
+          if [ -d "Lilu/build/Release/Lilu.kext" ]; then
+            echo "Copying built Lilu.kext from Lilu/build/Release"
+            rm -rf AppleBacklightFixup/Lilu.kext || true
+            mkdir -p AppleBacklightFixup
+            cp -R Lilu/build/Release/Lilu.kext AppleBacklightFixup/Lilu.kext
+          elif [ -d "Lilu/build/Build/Products/Release/Lilu.kext" ]; then
+            echo "Copying built Lilu.kext from Lilu/build/Build/Products/Release"
+            rm -rf AppleBacklightFixup/Lilu.kext || true
+            mkdir -p AppleBacklightFixup
+            cp -R Lilu/build/Build/Products/Release/Lilu.kext AppleBacklightFixup/Lilu.kext
+          else
+            echo "No built Lilu.kext binary found; continuing with source files only"
+          fi
+
+          # 4) Show what we have so the logs make it obvious
+          echo "Contents of AppleBacklightFixup/Lilu.kext (first 5 levels):"
+          find AppleBacklightFixup/Lilu.kext -maxdepth 5 -print -exec ls -la {} \; || true
 
       - name: Checkout AppleBacklightFixup source
         uses: actions/checkout@v4
@@ -102,12 +126,7 @@ jobs:
           path: AppleBacklightFixup
           fetch-depth: 0
 
-      - name: Copy Lilu.kext into AppleBacklightFixup folder (if available)
-        run: |
-          cp -R workspace_kexts/Lilu.kext AppleBacklightFixup/Lilu.kext || true
-          ls -la AppleBacklightFixup || true
-
-      - name: Build AppleBacklightFixup Build AppleBacklightFixup (use project defaults; do not inject Kernel.framework headers)
+      - name: Build AppleBacklightFixup (use project defaults; do not inject Kernel.framework headers)
         working-directory: AppleBacklightFixup
         run: |
           set -euo pipefail
