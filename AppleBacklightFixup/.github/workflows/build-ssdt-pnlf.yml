@@ -1,6 +1,8 @@
 name: Build SSDT-PNLF
 on:
   workflow_dispatch:
+  push:
+    branches: [ ci/add-lilu-resources ]
 
 jobs:
   build:
