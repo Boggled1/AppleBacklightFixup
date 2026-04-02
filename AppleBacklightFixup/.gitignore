@@ -1,0 +1,4 @@
+
+# allow Lilu resources
+s/Contents/Resources/
+s/Contents/Resources/**
