@@ -1,0 +1,25 @@
+name: Build SSDT-PNLF
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install acpica tools
+        run: sudo apt-get update && sudo apt-get install -y acpica-tools
+
+      - name: Compile SSDT-PNLF.dsl
+        run: |
+          iasl -ve SSDT-PNLF.dsl
+          mkdir -p ACPI && mv -f SSDT-PNLF.aml ACPI/SSDT-PNLF.aml
+          ls -l ACPI/SSDT-PNLF.aml
+
+      - name: Upload AML artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SSDT-PNLF-aml
+          path: ACPI/SSDT-PNLF.aml
