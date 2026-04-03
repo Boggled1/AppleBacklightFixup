@@ -14,7 +14,7 @@ jobs:
 
       - name: Compile SSDT-PNLF.dsl
         run: |
-          iasl -ve ACPI/SSDT-PNLF.dsl
+          iasl -ve SSDT-PNLF.dsl
           ls -l ACPI/SSDT-PNLF.aml
 
       - name: Upload AML artifact
